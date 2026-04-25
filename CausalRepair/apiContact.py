@@ -9,14 +9,13 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 # ----------------------------------------------------------------------
 # Data structures exchanged between LLM and environment
 # ----------------------------------------------------------------------
+
 @dataclass(frozen=True)
 class Observation:
     """What the LLM sees at each step."""
-    # Human‑readable description of the current buggy state
-    # (e.g., failing test output, relevant code snippet, available actions)
     description: str
-    # Optional extra fields (e.g., remaining edit budget, runtime stats)
     extra: Dict[str, Any] = field(default_factory=dict)
+
 
 
 @dataclass(frozen=True)
@@ -26,19 +25,20 @@ class Action:
     Exactly one of the four types is allowed; unused fields should be None.
     """
     action_type: Literal["diagnose", "intervene", "propagate", "commit_repair"]
-    target: Optional[str] = None               # e.g. "line_42", "function_foo", "test_bar"
-    value: Optional[Any] = None                # new value / edit for intervene
-    rationale: Optional[str] = None            # text justification for commit_repair
-    payload: Dict[str, Any] = field(default_factory=dict)  # future‑proof extension
+    target: Optional[str] = None  # e.g. "line_42", "function_foo", "test_bar"
+    value: Optional[Any] = None  # new value / edit for intervene
+    rationale: Optional[str] = None  # text justification for commit_repair
+    payload: Dict[str, Any] = field(default_factory=dict)
+
 
 
 @dataclass(frozen=True)
 class StepResult:
     """Result returned by ``step``."""
     observation: Observation
-    reward: float                              # scalar reward for this transition
-    done: bool                                 # episode finished?
-    info: Dict[str, Any]                       # diagnostics, debug, etc.
+    reward: float  # scalar reward for this transition
+    done: bool  # episode finished?
+    info: Dict[str, Any] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------------

@@ -3,58 +3,26 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-
 """
-Causalrepair Environment Implementation.
-
-A simple test environment that echoes back messages sent to it.
-Perfect for testing HTTP server infrastructure.
+CausalRepairEnv: Core environment for causal diagnosis and repair (OpenEnv-compatible).
 """
-
-
-from openenv.core.env_server.interfaces import Environment
 from typing import Any, Dict
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from models import CausalrepairAction, CausalrepairObservation, StepResult
-from pydantic import BaseModel, Field
+from .. import apiContact
 
-
-class CausalrepairEnvironment(Environment):
-    """
-    CausalRepair RL environment for diagnosis and repair using a pluggable adapter.
-    """
-    SUPPORTS_CONCURRENT_SESSIONS: bool = True
-    @property
-    def state(self):
-            return {
-                "world": self.world,
-                "steps": self.steps,
-                "diagnose_calls": self.diagnose_calls,
-                "done": self._done,
-            }
+class CausalRepairEnv:
     def __init__(self, adapter, max_steps=20):
         self.adapter = adapter
         self.max_steps = max_steps
         self.reset()
 
     def reset(self):
-        print("Environment reset called")
         self.world = self.adapter.generate_world()
         self.adapter.inject_fault(self.world)
         self.steps = 0
         self.diagnose_calls = 0
-        self._done = False
-        obs = self.adapter.render_observation(self.world)
-        return StepResult(
-            observation=obs.model_dump(),
-            reward=0.0,
-            done=False,
-            info={"steps": self.steps, "diagnose_calls": self.diagnose_calls}
-        )
+        return self.adapter.render_observation(self.world)
 
-    def step(self, action: CausalrepairAction):
+    def step(self, action: apiContact.Action):
         reward = 0.0
         done = False
         info = {"steps": self.steps, "diagnose_calls": self.diagnose_calls}
@@ -76,15 +44,9 @@ class CausalrepairEnvironment(Environment):
             if self.diagnose_calls <= 3:
                 reward += 0.2
             done = True
-            self._done = True
         else:
             reward = -0.1
         self.steps += 1
         info = {"steps": self.steps, "diagnose_calls": self.diagnose_calls}
         obs = self.adapter.render_observation(self.world)
-        return StepResult(
-            observation=obs.model_dump(),
-            reward=reward,
-            done=done,
-            info=info
-        )
+        return obs, reward, done, info

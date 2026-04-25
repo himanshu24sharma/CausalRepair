@@ -38,11 +38,11 @@ except Exception as e:  # pragma: no cover
 
 from models import CausalrepairAction, CausalrepairObservation
 from server.CausalRepair_environment import CausalrepairEnvironment
-
+from server.mock_adapter import MockAdapter
 
 # Create the app with web interface and README integration
 app = create_app(
-    CausalrepairEnvironment,
+    lambda: CausalrepairEnvironment(adapter=MockAdapter()),
     CausalrepairAction,
     CausalrepairObservation,
     env_name="CausalRepair",

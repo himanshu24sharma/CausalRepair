@@ -10,18 +10,51 @@ Data models for the Causalrepair Environment.
 The CausalRepair environment is a simple test environment that echoes back messages.
 """
 
-from openenv.core.env_server.types import Action, Observation
-from pydantic import Field
+from pydantic import BaseModel, Field
+from typing import Any, Dict, Literal, Optional
 
+class CausalrepairAction(BaseModel):
+    """Action for the Causalrepair environment."""
+    action_type: Literal["diagnose", "intervene", "propagate", "commit_repair"]
+    target: Optional[str] = None  # e.g. "line_42", "function_foo", "test_bar"
+    value: Optional[Any] = None  # new value / edit for intervene
+    rationale: Optional[str] = None  # text justification for commit_repair
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
-class CausalrepairAction(Action):
-    """Action for the Causalrepair environment - just a message to echo."""
+class CausalrepairObservation(BaseModel):
+    """Observation from the Causalrepair environment."""
+    description: str
+    extra: Dict[str, Any] = Field(default_factory=dict)
 
-    message: str = Field(..., description="Message to echo back")
+class StepResult(BaseModel):
+    observation: CausalrepairObservation
+    reward: float
+    done: bool
+    info: dict
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
 
+"""
+Data models for the Causalrepair Environment.
 
-class CausalrepairObservation(Observation):
-    """Observation from the Causalrepair environment - the echoed message."""
+The CausalRepair environment is a simple test environment that echoes back messages.
+"""
 
-    echoed_message: str = Field(default="", description="The echoed message")
-    message_length: int = Field(default=0, description="Length of the echoed message")
+from pydantic import BaseModel, Field
+from typing import Any, Dict, Literal, Optional
+
+class CausalrepairAction(BaseModel):
+    """Action for the Causalrepair environment."""
+    action_type: Literal["diagnose", "intervene", "propagate", "commit_repair"]
+    target: Optional[str] = None  # e.g. "line_42", "function_foo", "test_bar"
+    value: Optional[Any] = None  # new value / edit for intervene
+    rationale: Optional[str] = None  # text justification for commit_repair
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+class CausalrepairObservation(BaseModel):
+    """Observation from the Causalrepair environment."""
+    description: str
+    extra: Dict[str, Any] = Field(default_factory=dict)
