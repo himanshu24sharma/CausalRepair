@@ -17,12 +17,17 @@ Endpoints:
     - GET /schema: Get action/observation schemas
     - WS /ws: WebSocket endpoint for persistent sessions
 
+Adapter selection (set CR_ADAPTER before starting the server):
+    "code"      — CodeRepairAdapter (3 functions, exec-based tests)  [DEFAULT]
+    "hydraulic" — MockAdapter (valve -> pressure -> alarm)
+
 Usage:
-    # Development (with auto-reload):
+    # Code repair (default):
     uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
-    # Production:
-    uvicorn server.app:app --host 0.0.0.0 --port 8000 --workers 4
+    # Hydraulic domain:
+    $env:CR_ADAPTER="hydraulic"; uvicorn server.app:app --port 8000   # PowerShell
+    CR_ADAPTER=hydraulic uvicorn server.app:app --port 8000           # bash/Linux
 
     # Or run directly:
     python -m server.app
@@ -36,17 +41,37 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 
+import os
+
 from models import CausalrepairAction, CausalrepairObservation
 from server.CausalRepair_environment import CausalrepairEnvironment
 from server.mock_adapter import MockAdapter
+from server.code_repair_adapter import CodeRepairAdapter
 
-# Create the app with web interface and README integration
+# Registry: CR_ADAPTER value -> adapter class.
+# To add a new domain, register it here in one line.
+ADAPTERS = {
+    "code":      CodeRepairAdapter,
+    "hydraulic": MockAdapter,
+}
+
+_adapter_name = os.environ.get("CR_ADAPTER", "code").lower()
+if _adapter_name not in ADAPTERS:
+    raise ValueError(
+        f"Unknown CR_ADAPTER={_adapter_name!r}. "
+        f"Valid choices: {sorted(ADAPTERS)}"
+    )
+_adapter_cls = ADAPTERS[_adapter_name]
+print(f"[CausalRepair] Using adapter: {_adapter_name} ({_adapter_cls.__name__})")
+
+# Create the app — factory is called once per WebSocket session,
+# so each session gets its own fresh adapter instance and world.
 app = create_app(
-    lambda: CausalrepairEnvironment(adapter=MockAdapter()),
+    lambda: CausalrepairEnvironment(adapter=_adapter_cls()),
     CausalrepairAction,
     CausalrepairObservation,
     env_name="CausalRepair",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=1,  # increase to allow more concurrent WebSocket sessions
 )
 
 

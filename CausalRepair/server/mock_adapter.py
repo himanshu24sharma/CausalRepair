@@ -1,11 +1,17 @@
 from models import CausalrepairObservation
+from server.base_adapter import BaseAdapter
 
-class MockAdapter:
+
+class MockAdapter(BaseAdapter):
+    """Hydraulic-flavored reference adapter (valve -> pressure -> alarm)."""
+
+    domain_name = "hydraulic"
+
     def generate_world(self):
         return {
             "valve": "open",
             "pressure": 50,
-            "alarm": False
+            "alarm": False,
         }
 
     def inject_fault(self, world):
@@ -14,7 +20,7 @@ class MockAdapter:
     def render_observation(self, world):
         return CausalrepairObservation(
             description=f"valve={world['valve']}, pressure={world['pressure']}, alarm={world['alarm']}",
-            extra=world.copy()
+            extra=world.copy(),
         )
 
     def diagnose(self, world, entity):
