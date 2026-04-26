@@ -34,13 +34,16 @@ class CausalrepairEnvironment(Environment):
                 "diagnose_calls": self.diagnose_calls,
                 "done": self._done,
             }
-    def __init__(self, adapter, max_steps=20):
+    def __init__(self, adapter, max_steps: int = 10, diagnose_budget: int = 3):
         self.adapter = adapter
         self.max_steps = max_steps
+        self.diagnose_budget = diagnose_budget
+        self.steps = 0
+        self.diagnose_calls = 0
+        self._done = False
         self.reset()
 
     def reset(self):
-        print("Environment reset called")
         self.world = self.adapter.generate_world()
         self.adapter.inject_fault(self.world)
         self.steps = 0
@@ -51,40 +54,39 @@ class CausalrepairEnvironment(Environment):
             observation=obs.model_dump(),
             reward=0.0,
             done=False,
-            info={"steps": self.steps, "diagnose_calls": self.diagnose_calls}
+            info={"steps": 0, "diagnose_calls": 0},
         )
 
     def step(self, action: CausalrepairAction):
-        reward = 0.0
-        done = False
-        info = {"steps": self.steps, "diagnose_calls": self.diagnose_calls}
-
-        if action.action_type == "diagnose":
-            self.diagnose_calls += 1
-            self.adapter.diagnose(self.world, action.target)
-            reward = 0.0 if self.diagnose_calls <= 3 else -0.1
-        elif action.action_type == "intervene":
-            self.adapter.intervene(self.world, action.target, action.value)
-            reward = 0.0
-        elif action.action_type == "propagate":
-            self.adapter.propagate(self.world)
-            reward = 0.0
-        elif action.action_type == "commit_repair":
-            success = self.adapter.check_constraints(self.world)
-            reward = 1.0 if success else -0.5
-            reward += 0.3 * (1 - self.steps / self.max_steps)
-            if self.diagnose_calls <= 3:
-                reward += 0.2
-            done = True
-            self._done = True
-        else:
-            reward = -0.1
         self.steps += 1
-        info = {"steps": self.steps, "diagnose_calls": self.diagnose_calls}
+        done = False
+        action_type = action.action_type
+
+        if action_type == "diagnose":
+            self.diagnose_calls += 1
+            self.adapter.diagnose(self.world, action.target or "")
+        elif action_type == "intervene":
+            self.adapter.intervene(self.world, action.target, action.value)
+        elif action_type == "propagate":
+            self.adapter.propagate(self.world)
+        elif action_type == "commit_repair":
+            done = True
+
+        if not done and self.steps >= self.max_steps:
+            done = True
+
         obs = self.adapter.render_observation(self.world)
+        self._done = done
+
+        info = {
+            "steps": self.steps,
+            "diagnose_calls": self.diagnose_calls,
+            "constraints_ok": self.adapter.check_constraints(self.world),
+            "action_type": action_type,
+        }
         return StepResult(
             observation=obs.model_dump(),
-            reward=reward,
+            reward=0.0,
             done=done,
-            info=info
+            info=info,
         )

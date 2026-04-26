@@ -33,6 +33,51 @@ def build_prompt(obs):
     # Simple stringification for now
     return str(obs)
 
+
+def compute_reward(
+    action: CausalrepairAction,
+    done: bool,
+    info: dict,
+    max_steps: int,
+    diagnose_budget: int,
+) -> float:
+    """Commit-centric shaped reward; the env itself stays reward-free.
+
+    Strategy:
+      - diagnose:               -0.05 (small per-call penalty)
+      - intervene / propagate:   0.0  (main reward is on commit)
+      - commit_repair:
+          * constraints broken: -1.0
+          * constraints ok:     +1.0 + efficiency_bonus + budget_bonus
+              efficiency_bonus = 0.3 * max(0, 1 - steps / max_steps)
+              budget_bonus     = 0.2 if diagnose_calls <= diagnose_budget else 0.0
+      - episode ended without commit (timeout / unknown action): -0.5
+    """
+    action_type = action.action_type
+    constraints_ok = bool(info.get("constraints_ok", False))
+    steps = int(info.get("steps", 0))
+    diagnose_calls = int(info.get("diagnose_calls", 0))
+
+    if action_type == "commit_repair":
+        if not constraints_ok:
+            return -1.0
+        success = 1.0
+        efficiency = 0.3 * max(0.0, 1.0 - steps / max_steps)
+        budget_bonus = 0.2 if diagnose_calls <= diagnose_budget else 0.0
+        return success + efficiency + budget_bonus
+
+    # Timeout: episode ended without a commit (covers any non-commit action)
+    if done:
+        return -0.5
+
+    if action_type == "diagnose":
+        return -0.05
+
+    if action_type in ("intervene", "propagate"):
+        return 0.0
+
+    return 0.0
+
 def main():
     env = CausalrepairEnvironment(adapter=MockAdapter())
     API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
@@ -67,9 +112,15 @@ def main():
         try:
             step_result = env.step(action)
             obs = step_result.observation
-            reward = step_result.reward
             done = step_result.done
             info = step_result.info
+            reward = compute_reward(
+                action=action,
+                done=done,
+                info=info,
+                max_steps=env.max_steps,
+                diagnose_budget=env.diagnose_budget,
+            )
             error = None
         except Exception as e:
             error = str(e)
