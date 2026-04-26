@@ -27,6 +27,7 @@ class CausalrepairObservation(BaseModel):
     """Observation from the Causalrepair environment."""
     description: str
     extra: Dict[str, Any] = Field(default_factory=dict)
+    diagnose_result: Optional[str] = None
 
 
 class StepResult(BaseModel):

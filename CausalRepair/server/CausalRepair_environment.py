@@ -55,6 +55,7 @@ class CausalrepairEnvironment(Environment):
         self.steps = 0
         self.diagnose_calls = 0
         self._done = False
+        self._last_diagnose_result = None
         obs = self.adapter.render_observation(self.world)
         obs_dict = obs.model_dump()
         obs_dict["prev_observation"] = self.prev_observation.copy()
@@ -94,11 +95,9 @@ class CausalrepairEnvironment(Environment):
         obs = self.adapter.render_observation(self.world)
         sys.stdout.flush()
         obs_dict = obs.model_dump()
-        # If diagnose_result exists, add it to the observation
-        if action.action_type == "diagnose":
-            if "diagnose_results" not in obs_dict:
-                obs_dict["diagnose_results"] = []
-            obs_dict["diagnose_results"].append(diagnose_result)
+        # Persist the latest diagnose output so the next LLM prompt can use it.
+        if self._last_diagnose_result is not None:
+            obs_dict["diagnose_result"] = self._last_diagnose_result
         self._done = done
 
         info = {

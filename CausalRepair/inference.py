@@ -87,7 +87,7 @@ def main():
     done = False
     total_reward = 0
     step_count = 0
-    max_steps = 2
+    max_steps = 10
     rewards = []
         
     log_start(env="CausalRepair-v0", model=MODEL_NAME)
@@ -151,6 +151,32 @@ def main():
         rewards.append(reward)
         total_reward += reward
         step_count += 1
+
+        if error is None and action.action_type == "intervene" and not done and step_count < max_steps:
+            propagate_action = CausalrepairAction(action_type="propagate")
+            try:
+                print(propagate_action)
+                step_result = env.step(propagate_action)
+                print("action done")
+                print(f"[DEBUG] Observation as dict: {getattr(step_result.observation, 'model_dump', lambda: step_result.observation)()}", flush=True)
+                obs = step_result.observation
+                done = step_result.done
+                info = step_result.info
+                reward = compute_reward(
+                    action=propagate_action,
+                    done=done,
+                    info=info,
+                    max_steps=env.max_steps,
+                    diagnose_budget=env.diagnose_budget,
+                )
+                error = None
+            except Exception as e:
+                error = str(e)
+                obs, reward, done, info = None, 0.0, True, {}
+            log_step(step=step_count+1, action=str(propagate_action), reward=reward, done=done, error=error)
+            rewards.append(reward)
+            total_reward += reward
+            step_count += 1
     log_end(success=done, steps=step_count, rewards=rewards)
 
 if __name__ == "__main__":
