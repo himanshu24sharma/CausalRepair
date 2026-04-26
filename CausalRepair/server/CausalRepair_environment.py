@@ -13,12 +13,10 @@ Perfect for testing HTTP server infrastructure.
 
 
 from openenv.core.env_server.interfaces import Environment
-from typing import Any, Dict
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from models import CausalrepairAction, CausalrepairObservation, StepResult
-from pydantic import BaseModel, Field
+from models import CausalrepairAction, StepResult
 
 class CausalrepairEnvironment(Environment):
     """
@@ -39,7 +37,7 @@ class CausalrepairEnvironment(Environment):
             "done": self._done,
             "observation": obs_dict
         }
-    def __init__(self, adapter, max_steps=20):
+    def __init__(self, adapter, max_steps=20, diagnose_budget=3):
         self.adapter = adapter
         print(f"Using adapter: {adapter.__class__.__name__}")
         self.max_steps = max_steps
@@ -47,6 +45,8 @@ class CausalrepairEnvironment(Environment):
         self.steps = 0
         self.diagnose_calls = 0
         self._done = False
+        self.prev_observation = []
+        self._last_diagnose_result = None
         self.reset()
 
     def reset(self):
@@ -76,16 +76,11 @@ class CausalrepairEnvironment(Environment):
         self.steps += 1
         done = False
         action_type = action.action_type
-        diagnose_results = []
         if action_type == "diagnose":
             self.diagnose_calls += 1
             diagnose_result = self.adapter.diagnose(self.world, action.target)
             self._last_diagnose_result = diagnose_result
             self.adapter.propagate(self.world)
-            reward = 0.0 if self.diagnose_calls <= 3 else -0.1
-            diagnose_results.append(diagnose_result)
-        elif action.action_type == "intervene":
-            self.adapter.diagnose(self.world, action.target or "")
         elif action_type == "intervene":
             self.adapter.intervene(self.world, action.target, action.value)
         elif action_type == "propagate":
@@ -100,12 +95,10 @@ class CausalrepairEnvironment(Environment):
         sys.stdout.flush()
         obs_dict = obs.model_dump()
         # If diagnose_result exists, add it to the observation
-        print(diagnose_result)
         if action.action_type == "diagnose":
             if "diagnose_results" not in obs_dict:
                 obs_dict["diagnose_results"] = []
             obs_dict["diagnose_results"].append(diagnose_result)
-        print(obs_dict.get("diagnose_results", []))
         self._done = done
 
         info = {
