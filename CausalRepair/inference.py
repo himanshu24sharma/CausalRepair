@@ -9,10 +9,10 @@ import json
 from models import CausalrepairAction
 from openai import OpenAI
 from server.CausalRepair_environment import CausalrepairEnvironment
-from server.mock_adapter import MockAdapter
+from server.code_repair_adapter import CodeRepairAdapter
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "DummyModel")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3.5-9B:together")
 BENCHMARK = "CausalRepair-v0"
 
 def log_start(env: str, model: str) -> None:
@@ -34,7 +34,7 @@ def build_prompt(obs):
     return str(obs)
 
 def main():
-    env = CausalrepairEnvironment(adapter=MockAdapter())
+    env = CausalrepairEnvironment(adapter=CodeRepairAdapter())
     API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
     client = OpenAI(base_url=LLM_BASE_URL, api_key=API_KEY)
     reset_result = env.reset()
@@ -42,30 +42,52 @@ def main():
     done = False
     total_reward = 0
     step_count = 0
-    max_steps = 20
+    max_steps = 2
     rewards = []
         
     log_start(env="CausalRepair-v0", model=MODEL_NAME)
-    SYSTEM_PROMPT = "You are a CausalRepair agent. Given the observation, reply with a valid action as a JSON object."
+    SYSTEM_PROMPT = (
+        "You are a CausalRepair agent. Your goal is to maximize the total reward, which is based on how many tests pass at the end. "
+        "You should fix all failing functions before using commit_repair. "
+        "Given the observation, reply ONLY with a valid action as a JSON object. "
+        "Do NOT use markdown, code blocks, or any extra text—just the JSON object. "
+        "The JSON must use these keys: 'action_type', 'target', 'value', 'rationale', 'payload'. "
+        "Available actions are: "
+        "diagnose: Inspect a function to understand why it is failing. "
+        "intervene: Propose a fix for a function by providing new code. "
+        "propagate: Re-run all tests after an intervention. "
+        "commit_repair: Submit your final repair and end the episode. This should only be used after you have diagnosed, intervened, and propagated. Once you use commit_repair, the environment will check if all tests pass and end the episode. "
+        "You must NOT use commit_repair as your first action. Always diagnose the failing entity first. After diagnosing, if you have enough information, proceed to intervene on the failing entity, then propagate, and only then use commit_repair to finish. Do not repeat diagnose unless new information is needed. "
+        "Example: {\"action_type\": \"diagnose\", \"target\": \"add\", \"value\": null, \"rationale\": null, \"payload\": {}}"
+    )
     while not done and step_count < max_steps:
         try:
+            # print(f"[DEBUG] Observation before prompt: {obs}", flush=True)
             prompt = build_prompt(obs)
             completion = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.0,
-                max_tokens=64,
-                stream=False,
+                  model="Qwen/Qwen3.5-9B",
+                    messages=[
+                                    {"role": "system", "content": SYSTEM_PROMPT},
+                                    {"role": "user", "content": prompt},
+                                ],
+                    max_tokens=81920,
+                    temperature=1.0,
+                    top_p=0.95,
+                    presence_penalty=1.5,
+                    extra_body={
+                        "top_k": 20,
+                    }, 
+                            
             )
             action_json = (completion.choices[0].message.content or "").strip()
             action = CausalrepairAction(**json.loads(action_json))
         except Exception:
             action = CausalrepairAction(action_type="commit_repair")
         try:
+            print(action)
             step_result = env.step(action)
+            print("action done")
+            print(f"[DEBUG] Observation as dict: {getattr(step_result.observation, 'model_dump', lambda: step_result.observation)()}", flush=True)
             obs = step_result.observation
             reward = step_result.reward
             done = step_result.done

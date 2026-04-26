@@ -63,11 +63,12 @@ if _adapter_name not in ADAPTERS:
     )
 _adapter_cls = ADAPTERS[_adapter_name]
 print(f"[CausalRepair] Using adapter: {_adapter_name} ({_adapter_cls.__name__})")
+# Create a single persistent environment instance
+persistent_env = CausalrepairEnvironment(adapter=_adapter_cls())
 
-# Create the app — factory is called once per WebSocket session,
-# so each session gets its own fresh adapter instance and world.
+# Always return the same instance for every request/session
 app = create_app(
-    lambda: CausalrepairEnvironment(adapter=_adapter_cls()),
+    lambda: persistent_env,
     CausalrepairAction,
     CausalrepairObservation,
     env_name="CausalRepair",

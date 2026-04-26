@@ -7,5 +7,6 @@
 """Causalrepair environment server components."""
 
 from .CausalRepair_environment import CausalrepairEnvironment
+from .code_repair_adapter import CodeRepairAdapter
 
-__all__ = ["CausalrepairEnvironment"]
+__all__ = ["CausalrepairEnvironment", "CodeRepairAdapter"]

@@ -8,9 +8,11 @@
 
 from .client import CausalrepairEnv
 from .models import CausalrepairAction, CausalrepairObservation
+from .server import CodeRepairAdapter
 
 __all__ = [
     "CausalrepairAction",
     "CausalrepairObservation",
     "CausalrepairEnv",
+    "CodeRepairAdapter",
 ]
