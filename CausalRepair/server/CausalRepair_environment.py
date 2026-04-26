@@ -47,6 +47,10 @@ class CausalrepairEnvironment(Environment):
         self._done = False
         self.prev_observation = []
         self._last_diagnose_result = None
+        # Number of tests with status == "unknown" at the start of the most
+        # recent step. Used by the reward shaper to give a small bonus when a
+        # propagate() action turns one or more tests from "unknown" -> known.
+        self._prev_unknown_count = 0
         self.reset()
 
     def reset(self):
@@ -56,6 +60,9 @@ class CausalrepairEnvironment(Environment):
         self.diagnose_calls = 0
         self._done = False
         self._last_diagnose_result = None
+        self._prev_unknown_count = sum(
+            1 for t in self.world["tests"].values() if t["status"] == "unknown"
+        )
         obs = self.adapter.render_observation(self.world)
         obs_dict = obs.model_dump()
         obs_dict["prev_observation"] = self.prev_observation.copy()
@@ -77,6 +84,14 @@ class CausalrepairEnvironment(Environment):
         self.steps += 1
         done = False
         action_type = action.action_type
+
+        # Snapshot how many tests are "unknown" BEFORE this action runs so the
+        # reward shaper can credit propagate() for turning unknowns into knowns.
+        prev_unknown_count = sum(
+            1 for t in self.world["tests"].values() if t["status"] == "unknown"
+        )
+        self._prev_unknown_count = prev_unknown_count
+
         if action_type == "diagnose":
             self.diagnose_calls += 1
             diagnose_result = self.adapter.diagnose(self.world, action.target)
@@ -100,11 +115,21 @@ class CausalrepairEnvironment(Environment):
             obs_dict["diagnose_result"] = self._last_diagnose_result
         self._done = done
 
+        # How many tests are still "unknown" AFTER the action ran. The shaping
+        # reward for propagate() is proportional to (prev_unknown - after_unknown).
+        after_unknown_count = sum(
+            1 for t in self.world["tests"].values() if t["status"] == "unknown"
+        )
+        newly_known = max(0, prev_unknown_count - after_unknown_count)
+
         info = {
             "steps": self.steps,
             "diagnose_calls": self.diagnose_calls,
             "constraints_ok": self.adapter.check_constraints(self.world),
             "action_type": action_type,
+            "prev_unknown_count": prev_unknown_count,
+            "after_unknown_count": after_unknown_count,
+            "newly_known": newly_known,
         }
         return StepResult(
             observation=obs_dict,
